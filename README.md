@@ -1,4 +1,4 @@
-# auto_filer
+# DFT_VASP_Autofiler
 
 autofiler.sh
 * This code, will copy files from another folder and help setup the vasp input files by copying or replicating the existing format of a manually setup folder
