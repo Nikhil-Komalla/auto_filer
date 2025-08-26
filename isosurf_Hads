@@ -1,0 +1,102 @@
+#!/bin/bash
+# Get current folder name (e.g., Cu36)
+FOLDER=$(basename "$PWD")
+echo "Running in destination folder: $PWD"
+echo "Folder name detected: $FOLDER"
+
+# Define source H_ads path relative to current directory
+SRC=$(realpath ../../H_ads/$FOLDER)
+echo "Source folder resolved to: $SRC"
+if [[ ! -d "$SRC" ]]; then
+    echo "Source folder $SRC does not exist. Exiting."
+    exit 1
+fi
+
+# Create target subdirectories
+mkdir -p surf+mol surf mol
+
+# Step 1: Copy all main input files to surf+mol
+echo "Copying main files to surf+mol..."
+cp "$SRC"/{INCAR,KPOINTS,POTCAR,run.sh,o_run.sh,CONTCAR} ./surf+mol/
+
+# Step 2: Create POSCARs for surf and mol
+echo "Preparing POSCARs..."
+cp ./surf+mol/CONTCAR ./surf/POSCAR
+cp ./surf+mol/CONTCAR ./mol/POSCAR
+# Step 3: Find reference (try Cu72 first, then ask)
+REF="Cu72"
+if [[ ! -d ../../$REF ]]; then
+    echo "Enter reference folder name (default: Cu72):"
+    read -r input
+    REF=${input:-Cu72}
+fi
+echo "Using reference: $REF"
+
+# Step 4: Copy reference files into surf
+echo "Copying reference files into surf..."
+cd surf || exit
+if [[ -d ../../$REF/surf ]]; then
+    cp ../../$REF/surf/{INCAR,KPOINTS,POTCAR,run.sh,o_run.sh} .
+else
+    echo "Reference $REF does not have ./surf subdir"
+    exit 1
+fi
+cd ..
+
+# Step 5: Copy reference files into mol
+echo "Copying reference files into mol..."
+cd mol || exit
+if [[ -d ../../$REF/mol ]]; then
+    cp ../../$REF/mol/{INCAR,KPOINTS,POTCAR,run.sh,o_run.sh} .
+else
+    echo "Reference $REF does not have ./mol subdir"
+    exit 1
+fi
+cd ..
+
+# Step 6: Copy reference files into surf+mol
+echo "Copying reference files into surf+mol..."
+cd surf+mol || exit
+if [[ -d ../../$REF/surf+mol ]]; then
+    cp ../../$REF/surf+mol/{INCAR,KPOINTS,POTCAR,run.sh,o_run.sh} .
+else
+    echo "Reference $REF does not have ./surf+mol subdir"
+    exit 1
+fi
+cd ..
+
+
+# Step 7: Modify surf POSCAR
+echo "Modifying surf POSCAR..."
+cd surf || exit
+cp POSCAR POSCAR.backup
+# Remove H from element list
+sed -i '1s/H//' POSCAR
+# Remove H from element symbols line (usually line 6 for VASP POSCAR)
+sed -i '6s/H//' POSCAR
+# Remove H count (usually line 7)
+sed -i '7s/[0-9]\+$//' POSCAR
+# Remove last line (hydrogen coordinate)
+sed -i '$d' POSCAR
+cd ..
+
+# Step 8: Modify mol POSCAR
+echo "Modifying mol POSCAR..."
+cd mol || exit
+cp POSCAR POSCAR.backup
+total_lines=$(wc -l < POSCAR)
+# Replace with only H
+sed -i '1s/.*/H/' POSCAR
+sed -i '6s/.*/H/' POSCAR
+sed -i '7s/.*/1/' POSCAR
+# Remove all atomic coordinates except the hydrogen
+if [[ $total_lines -gt 10 ]]; then
+    sed -i "10,$((total_lines-1))d" POSCAR
+fi
+cd ..
+
+# Step 9: move CONTCAR to POSCAR - surf+mol
+cd surf+mol
+mv CONTCAR POSCAR
+
+echo "Done! Files organized for: $FOLDER"
